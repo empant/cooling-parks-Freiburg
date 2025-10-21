@@ -1,0 +1,484 @@
+---
+title: "New temperature differences WITH BOTH BUILT UP AREA AT ONE"
+output: html_notebook
+---
+
+import data
+```{r}
+rm(list=ls())
+STGA <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRSTGA.csv")
+KART <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRKART.csv")
+INST <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRINST.csv")
+FRIE <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRFRIE.csv")
+MESS <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRMESS.csv")
+UNIK <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRUNIK.csv")
+SEEP <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRSEEP.csv")
+BETZ <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRBETZ.csv")
+```
+
+hours are 0-23
+```{r}
+range(STGA$Hour)
+```
+so I have to add 1 hour in order to have the x-axis labels be 1-24
+```{r}
+STGA$Hour <- STGA$Hour + 1
+SEEP$Hour <- SEEP$Hour + 1
+FRIE$Hour <- FRIE$Hour + 1
+```
+
+use svglite
+```{r}
+library(svglite)
+```
+
+function
+```{r}
+create_dual_temp_diff_plots <- function(
+  data,                           # The dataset to use
+  output_file,                    # Path to save the PDF output
+  temp_diff_cols,                 # Vector of 2 column names containing temperature difference values
+  temp_diff_labels,               # Vector of 2 labels for the temperature difference variables
+  park_name,                      # Park name for labels
+  built_up_name = "Built-up Area", # Name for built-up area in labels
+  group_col = "Hour",             # Column name for x-axis grouping (typically Hour)
+  season_col = "phenophase",      # Column name containing season information
+  season_value = "full canopy",   # Single season value to filter by
+  plot_colors = c("lightblue", "lightcoral"), # Colors for each boxplot type
+  box_border_colors = "black",    # Border colors for boxes
+  grid_color = "gray",            # Color for grid lines
+  grid_lty = "dotted",            # Line type for grid
+  grid_lwd = 0.7,                 # Line width for grid
+  background_below_zero = rgb(0.95, 0.95, 0.95), # Background color below zero
+  zero_line_color = "red",        # Color for zero line
+  zero_line_lty = 2,              # Line type for zero line
+  y_limits = c(-5, 5),            # Y-axis limits
+  pdf_width = 9,                 # Width of PDF output
+  pdf_height = 7,                 # Height of PDF output
+  pointsize = 14, 
+  x_label = "Hour of Day",        # Label for x-axis
+  y_label = NULL,                 # Label for y-axis (if NULL, will be generated)
+  add_text_boxes = TRUE,          # Whether to add the explanatory text boxes
+  use_24h_format = TRUE,          # Whether to use 24h format (1-24) or 0-23
+  box_width = 0.6,               # Width of individual boxes (wider)
+  outlier_size = 0.5,             # Size of outlier points
+  single_variable = FALSE         # If TRUE, uses only first temp_diff_col and centers it
+) {
+  # Default y-axis label if not provided
+  if (is.null(y_label)) {
+    y_label <- bquote(Delta*"T (°C)")
+  }
+  
+  # Validate inputs
+  if (length(temp_diff_cols) != 2) stop("temp_diff_cols must have exactly 2 elements")
+  if (length(temp_diff_labels) != 2) stop("temp_diff_labels must have exactly 2 elements")  
+  if (length(plot_colors) != 2) stop("plot_colors must have exactly 2 elements")
+  
+  # Ensure box_border_colors is the right length
+  if (length(box_border_colors) == 1) box_border_colors <- rep(box_border_colors, 2)
+  
+  # Define hours based on format preference
+  hours <- if(use_24h_format) 1:24 else 0:23
+  
+  # Filter data for the specified season
+  season_data <- data[data[[season_col]] == season_value, ]
+  
+  if (nrow(season_data) == 0) {
+    stop(paste("No data found for season:", season_value))
+  }
+  
+  # PDF or .svg file
+  #pdf(output_file, width = pdf_width, height = pdf_height, pointsize = pointsize)
+  svglite(output_file, width = pdf_width, height = pdf_height, pointsize = pointsize)
+
+    
+  # Set up single plot layout
+  par(mfrow = c(1, 1), mar = c(4, 4, 4, 1))
+ 
+  box_offset <- box_width * 0.3  # Increased distance to separate boxes more while keeping them reasonably close
+  
+  # Create empty plot with proper limits
+  plot(1, type = "n", 
+       xlim = c(min(hours) - 0.5, max(hours) + 0.5),
+       ylim = y_limits,
+       xlab = x_label,
+       ylab = y_label,
+       axes = FALSE)
+  
+  # Add background below 0
+  rect(par("usr")[1], y_limits[1], par("usr")[2], 0, 
+       col = background_below_zero, border = NA)
+  
+  # Add horizontal grid lines
+  abline(h = seq(y_limits[1], y_limits[2], by = 0.5), 
+         col = grid_color, lty = grid_lty, lwd = grid_lwd)
+  
+  # Create boxplots for each hour
+  for (i in 1:length(hours)) {
+    hour <- hours[i]
+    
+    # Get data for this hour
+hour_data1 <- season_data[season_data[[group_col]] == hour, temp_diff_cols[1]]
+if (!single_variable) {
+  hour_data2 <- season_data[season_data[[group_col]] == hour, temp_diff_cols[2]]
+} else {
+  hour_data2 <- numeric(0)  # Empty vector
+}
+
+# Remove NA values
+hour_data1 <- hour_data1[!is.na(hour_data1)]
+if (!single_variable) {
+  hour_data2 <- hour_data2[!is.na(hour_data2)]
+}
+# Skip if no data for this hour
+if (length(hour_data1) == 0 && length(hour_data2) == 0) next
+    
+    pos1 <- hour - box_offset # position 1
+    pos2 <- hour + box_offset # position 2
+    
+    # Create boxplot for first temperature difference variable 
+    if (length(hour_data1) > 0) {
+      boxplot(hour_data1, 
+              at = pos1, 
+              add = TRUE, 
+              axes = FALSE,
+              col = plot_colors[1],
+              border = box_border_colors[1],
+              boxwex = box_width,
+              outline = TRUE,
+              outcex = outlier_size)
+    }
+    
+    # Create boxplot for second temperature difference variable
+    if (length(hour_data2) > 0) {
+      boxplot(hour_data2, 
+              at = pos2, 
+              add = TRUE, 
+              axes = FALSE,
+              col = plot_colors[2],
+              border = box_border_colors[2],
+              boxwex = box_width,
+              outline = TRUE,
+              outcex = outlier_size)
+    }
+  }
+  
+  # Add axes - show all hours
+  if (length(hours) <= 12) {
+    # For 12 hours or fewer, show all labels normally
+    axis(1, at = hours, labels = hours)
+  } else {
+    # For 24 hours, show all labels but with smaller text
+    axis(1, at = hours, labels = hours, cex.axis = 0.7)
+  }
+  axis(2, at = seq(y_limits[1], y_limits[2], by = 1), las = 1)
+  
+  # Add explanatory text boxes if requested  
+  if (add_text_boxes) {
+    # Upper text box (built-up area is warmer than park)
+    label_upper <- bquote(Delta * "T > 0: " * .(built_up_name) * " is warmer")
+    text_width_upper <- strwidth(label_upper, cex = 0.9, font = 1) * 1.2 
+    text_height_upper <- strheight(label_upper, cex = 0.9, font = 1) * 1.8
+    
+    # Position in upper left
+    x_pos_upper <- min(hours)
+    y_pos_upper <- y_limits[2] - 0.5
+    
+    # White background rectangle with light border
+    rect(x_pos_upper, y_pos_upper - text_height_upper/2,
+         x_pos_upper + text_width_upper, y_pos_upper + text_height_upper/2,
+         col = "white", border = "black")
+    
+    # Text
+    text(x_pos_upper + text_width_upper/2, y_pos_upper, 
+         labels = label_upper, cex = 0.9, font = 1, adj = 0.5)
+    
+    # Lower text box (park is warmer than built-up area)
+    label_lower <- bquote(Delta * "T < 0: " * .(park_name) * " is warmer")
+    text_width_lower <- strwidth(label_lower, cex = 0.9, font = 1) * 1.2
+    text_height_lower <- strheight(label_lower, cex = 0.9, font = 1) * 1.8
+    
+    # Position in lower left
+    x_pos_lower <- min(hours)
+    y_pos_lower <- y_limits[1] + 0.5
+    
+    rect(x_pos_lower, y_pos_lower - text_height_lower/2,
+         x_pos_lower + text_width_lower, y_pos_lower + text_height_lower/2,
+         col = "white", border = "black")
+    
+    text(x_pos_lower + text_width_lower/2, y_pos_lower, 
+         labels = label_lower, cex = 0.9, font = 1, adj = 0.5)
+  }
+  
+  abline(h = 0, lwd = 1.5, lty = zero_line_lty, col = zero_line_color)
+  
+  legend("topright", 
+         legend = temp_diff_labels,
+         fill = plot_colors,
+         border = box_border_colors,
+         cex = 0.9,
+         bg = "white")
+  
+  box()
+  
+  dev.off()
+  
+  cat("Plot saved to:", output_file, "\n")
+}
+```
+
+
+STGA - INST & KART full canopy
+```{r}
+create_dual_temp_diff_plots(
+  data = STGA,
+  output_file = "STGA_temp_differences_full_canopy.svg",   # .pdf or .svg
+  temp_diff_cols = c("temp_diff_INST", "temp_diff_KART"),
+  temp_diff_labels = c("INST-STGA", "KART-STGA"),
+  park_name = "Park",
+  built_up_name = "Built-up area",
+  season_value = "full_canopy",
+  plot_colors = c("darkgreen", "darkseagreen3"),
+  y_limits = c(-5, 5)  
+)
+```
+
+STGA - INST & KART leafless
+```{r}
+create_dual_temp_diff_plots(
+  data = STGA,
+  output_file = "STGA_temp_differences_leafless.svg",   # .pdf or .svg
+  temp_diff_cols = c("temp_diff_INST", "temp_diff_KART"),
+  temp_diff_labels = c("INST-STGA", "KART-STGA"),
+  park_name = "Park",
+  built_up_name = "Built-up Area",
+  season_value = "leafless",
+  plot_colors = c("darkgreen", "darkseagreen3"),
+  y_limits = c(-5, 5)  
+)
+```
+
+
+FRIE - MESS & UNIK full canopy
+```{r}
+create_dual_temp_diff_plots(
+  data = FRIE,
+  output_file = "FRIE_temp_differences_full_canopy.svg",   # .pdf or .svg
+  temp_diff_cols = c("temp_diff_MESS", "temp_diff_UNIK"),
+  temp_diff_labels = c("MESS-FRIE", "UNIK-FRIE"),
+  park_name = "Park",
+  built_up_name = "Built-up area",
+  season_value = "full_canopy",
+  plot_colors = c("salmon3", "darksalmon"),
+  y_limits = c(-5, 5)  
+)
+```
+
+FRIE - MESS & UNIK leafless
+```{r}
+create_dual_temp_diff_plots(
+  data = FRIE,
+  output_file = "FRIE_temp_differences_leafless.svg",   # .pdf or .svg
+  temp_diff_cols = c("temp_diff_MESS", "temp_diff_UNIK"),
+  temp_diff_labels = c("MESS-FRIE", "UNIK-FRIE"),
+  park_name = "Park",
+  built_up_name = "Built-up area",
+  season_value = "leafless",
+  plot_colors = c("salmon3", "darksalmon"),
+  y_limits = c(-5, 5)  
+)
+```
+
+SEEP
+use svglite
+```{r}
+library(svglite)
+```
+
+
+```{r}
+create_single_temp_diff_plot <- function(
+  data,                           # The dataset to use
+  output_file,                    # Path to save the PDF output
+  temp_diff_col,                  # Single column name containing temperature difference values
+  temp_diff_label,                # Single label for the temperature difference variable
+  park_name,                      # Park name for labels
+  built_up_name = "Built-up Area", # Name for built-up area in labels
+  group_col = "Hour",             # Column name for x-axis grouping (typically Hour)
+  season_col = "phenophase",      # Column name containing season information
+  season_value = "full canopy",   # Single season value to filter by
+  plot_color = "cornflowerblue",  # Color for the boxplot
+  box_border_color = "black",     # Border color for boxes
+  grid_color = "gray",            # Color for grid lines
+  grid_lty = "dotted",            # Line type for grid
+  grid_lwd = 0.7,                 # Line width for grid
+  background_below_zero = rgb(0.95, 0.95, 0.95), # Background color below zero
+  zero_line_color = "red",        # Color for zero line
+  zero_line_lty = 2,              # Line type for zero line
+  y_limits = c(-5, 5),            # Y-axis limits
+  pdf_width = 9,                 # Width of PDF output
+  pdf_height = 7,                 # Height of PDF output
+  pointsize = 14, 
+  x_label = "Hour of Day",        # Label for x-axis
+  y_label = NULL,                 # Label for y-axis (if NULL, will be generated)
+  add_text_boxes = TRUE,          # Whether to add the explanatory text boxes
+  use_24h_format = TRUE,          # Whether to use 24h format (1-24) or 0-23
+  box_width = 1,                # Width of individual boxes
+  outlier_size = 0.5              # Size of outlier points
+) {
+  # Default y-axis label if not provided
+  if (is.null(y_label)) {
+    y_label <- bquote(Delta*"T (°C)")
+  }
+  
+  # Define hours based on format preference
+  hours <- if(use_24h_format) 1:24 else 0:23
+  
+  # Filter data for the specified season
+  season_data <- data[data[[season_col]] == season_value, ]
+  
+  if (nrow(season_data) == 0) {
+    stop(paste("No data found for season:", season_value))
+  }
+  
+  # Create PDF or SVG
+  #pdf(output_file, width = pdf_width, height = pdf_height, pointsize = pointsize)
+  svglite(output_file, width = pdf_width, height = pdf_height, pointsize = pointsize)
+  
+  # Set up single plot layout
+  par(mfrow = c(1, 1), mar = c(4, 4, 4, 1))
+  
+  # Create empty plot with proper limits
+  plot(1, type = "n", 
+       xlim = c(min(hours) - 0.5, max(hours) + 0.5),
+       ylim = y_limits,
+       xlab = x_label,
+       ylab = y_label,
+       axes = FALSE)
+  
+  # Add background below 0
+  rect(par("usr")[1], y_limits[1], par("usr")[2], 0, 
+       col = background_below_zero, border = NA)
+  
+  # Add horizontal grid lines
+  abline(h = seq(y_limits[1], y_limits[2], by = 0.5), 
+         col = grid_color, lty = grid_lty, lwd = grid_lwd)
+  
+  # Create boxplots for each hour
+  for (i in 1:length(hours)) {
+    hour <- hours[i]
+    
+    # Get data for this hour
+    hour_data <- season_data[season_data[[group_col]] == hour, temp_diff_col]
+    
+    # Remove NA values
+    hour_data <- hour_data[!is.na(hour_data)]
+    
+    # Skip if no data for this hour
+    if (length(hour_data) == 0) next
+    
+    # Create centered boxplot
+    boxplot(hour_data, 
+            at = hour, 
+            add = TRUE, 
+            axes = FALSE,
+            col = plot_color,
+            border = box_border_color,
+            boxwex = box_width,
+            outline = TRUE,
+            outcex = outlier_size)
+  }
+  
+  # Add axes - show all hours
+  if (length(hours) <= 12) {
+    # For 12 hours or fewer, show all labels normally
+    axis(1, at = hours, labels = hours)
+  } else {
+    # For 24 hours, show all labels but with smaller text
+    axis(1, at = hours, labels = hours, cex.axis = 0.7)
+  }
+  axis(2, at = seq(y_limits[1], y_limits[2], by = 1), las = 1)
+  
+  # Add explanatory text boxes if requested  
+  if (add_text_boxes) {
+    # Upper text box (built-up area is warmer than park)
+    label_upper <- bquote(Delta * "T > 0: " * .(built_up_name) * " is warmer")
+    text_width_upper <- strwidth(label_upper, cex = 0.9, font = 1) * 1.2 
+    text_height_upper <- strheight(label_upper, cex = 0.9, font = 1) * 1.8
+    
+    # Position in upper left
+    x_pos_upper <- min(hours)
+    y_pos_upper <- y_limits[2] - 0.5
+    
+    # White background rectangle with light border
+    rect(x_pos_upper, y_pos_upper - text_height_upper/2,
+         x_pos_upper + text_width_upper, y_pos_upper + text_height_upper/2,
+         col = "white", border = "black")
+    
+    # Text
+    text(x_pos_upper + text_width_upper/2, y_pos_upper, 
+         labels = label_upper, cex = 0.9, font = 1, adj = 0.5)
+    
+    # Lower text box (park is warmer than built-up area)
+    label_lower <- bquote(Delta * "T < 0: " * .(park_name) * " is warmer")
+    text_width_lower <- strwidth(label_lower, cex = 0.9, font = 1) * 1.2
+    text_height_lower <- strheight(label_lower, cex = 0.9, font = 1) * 1.8
+    
+    # Position in lower left
+    x_pos_lower <- min(hours)
+    y_pos_lower <- y_limits[1] + 0.5
+    
+    # White background rectangle with light border
+    rect(x_pos_lower, y_pos_lower - text_height_lower/2,
+         x_pos_lower + text_width_lower, y_pos_lower + text_height_lower/2,
+         col = "white", border = "black")
+    
+    # Text
+    text(x_pos_lower + text_width_lower/2, y_pos_lower, 
+         labels = label_lower, cex = 0.9, font = 1, adj = 0.5)
+  }
+  
+  # Add horizontal line at 0
+  abline(h = 0, lwd = 1.5, lty = zero_line_lty, col = zero_line_color)
+  
+  # Add border around the plot
+  box()
+  
+  # Close the PDF device
+  dev.off()
+  
+  cat("Plot saved to:", output_file, "\n")
+}
+```
+
+FULL CANOPY SEEP
+```{r}
+create_single_temp_diff_plot(
+  data = SEEP,
+  output_file = "SEEP_temp_differences_full_canopy.svg",
+  temp_diff_col = "temp_diff",
+  temp_diff_label = "BETZ-SEEP",
+  park_name = "Park",
+  built_up_name = "Built-up area",
+  season_value = "full_canopy",
+  plot_color = "cornflowerblue",
+  y_limits = c(-5, 5)
+)
+```
+
+LEAFLESS SEEP
+```{r}
+create_single_temp_diff_plot(
+  data = SEEP,
+  output_file = "SEEP_temp_differences_leafless.svg",   # save as .svg
+  temp_diff_col = "temp_diff",
+  temp_diff_label = "BETZ-SEEP",
+  park_name = "Park",
+  built_up_name = "Built-up area",
+  season_value = "leafless",
+  plot_color = "cornflowerblue",
+  y_limits = c(-5, 5)
+)
+```
+
+
