@@ -1,0 +1,580 @@
+---
+title: "Importing data into smaller datasets"
+output:
+  pdf_document: default
+---
+1.1 importing data
+```{r}
+rm(list=ls())
+station_info <- read.csv("myfile_station_info.csv")
+variables <- read.csv("ta_vp_rh_60_min_2022_09_01_2024_08_31_gap_filled_source_type.csv")
+```
+
+1.1.2 transforming to POSIXct format [BEFORE groupping by day/night!]
+```{r}
+library(dplyr)
+library(lubridate)
+class(variables$datetime)  # character 
+variables$datetime <- ymd_hms(variables$datetime)
+class(variables$datetime)  # POSIXct, POSIXt
+
+```
+```{r}
+# merging two datasets
+variables <- merge(variables, station_info[, c("station_id", "station_lat", "station_lon")], 
+                     by = "station_id", all.x = TRUE)
+```
+
+1.1.3 grouping by sunset sunrise times, to have day vs. night
+```{r}
+library(suncalc)
+library(tidyr)
+variables$date <- as.Date(variables$datetime)
+
+# testing for one observation
+test <- variables[1, ]
+test <- variables[1, ] %>%
+  rowwise() %>%           # performed for each row individually
+  mutate(sun_times = list(getSunlightTimes(date = date,     # creates a new column called sun_times, returns a data frame                                                             but we store it as a list
+                                           lat = station_lat, 
+                                           lon = station_lon))) %>%
+  mutate(sunrise = sun_times$sunrise,
+         sunset = sun_times$sunset) %>%
+  select(-sun_times)  # remove the column after extracting the needed variables, sunrise and sunset
+
+print(test)
+```
+
+1.2.1 extracting my parks: FRFRIE, FRSEEP, FRSTGA
+```{r}
+library(dplyr)
+parks_stations <- filter(station_info, station_id == "FRFRIE" | station_id == "FRSEEP" | station_id == "FRSTGA" |
+                           station_id == "FRHOCH")
+parks_variables <- filter(variables, station_id == "FRFRIE" | station_id == "FRSEEP" | station_id == "FRSTGA" |
+                            station_id == "FRHOCH" | station_id == "FRDIET")
+# filter only for year 2023
+parks_variables <- parks_variables[format(parks_variables$datetime, "%Y") == "2023", ]
+```
+
+1.2.2 extracting reference points: FRBETZ, FRINST, FRUNIK, FRKART
+```{r}
+refpoints_stations <- filter(station_info, station_id == "FRBETZ" | station_id == "FRINST" | station_id == "FRUNIK" 
+                             | station_id == "FRKART"| station_id == "FRHERD" | station_id == "FRMESS")
+refpoints_variables <- filter(variables, station_id == "FRBETZ" | station_id == "FRINST" | station_id == "FRUNIK" 
+                             | station_id == "FRKART"| station_id == "FRHERD" | station_id == "FRMESS")
+refpoints_variables <- refpoints_variables[format(refpoints_variables$datetime, "%Y") == "2023", ]
+```
+
+1.2.3 same thing for parks and reference points as in 1.1.3
+```{r}
+library(dplyr)
+library(suncalc)
+# parks:
+parks_variables <- parks_variables %>%
+  rowwise() %>%
+  mutate(sun_times1 = list(getSunlightTimes(date = as.Date(datetime),  
+                                           lat = station_lat, 
+                                           lon = station_lon))) %>%
+  mutate(sunrise = sun_times1$sunrise,
+         sunset = sun_times1$sunset) %>%
+  select(-sun_times1)
+```
+
+writing a csv
+```{r}
+write.csv(as.data.frame(parks_variables), "parks_variables_withsunsetrise.csv")
+```
+
+
+```{r}
+# ref. points:
+refpoints_variables <- refpoints_variables %>%
+  rowwise() %>%
+  mutate(sun_times2 = list(getSunlightTimes(date = as.Date(datetime),  
+                                           lat = station_lat, 
+                                           lon = station_lon))) %>%
+  mutate(sunrise = sun_times2$sunrise,
+         sunset = sun_times2$sunset) %>%
+  select(-sun_times2)
+```
+
+writing a csv
+```{r}
+rm(list=ls())
+#write.csv(as.data.frame(refpoints_variables), "refpoints_variables_withsunsetrise.csv")
+refpoints_variables <- read.csv("/Users/teodorica/Downloads/thesonja/R/R for the thesis/smaller_datasets/refpoints_variables_withsunsetrise.csv")
+parks_variables <- read.csv("/Users/teodorica/Downloads/thesonja/R/R for the thesis/smaller_datasets/parks_variables_withsunsetrise.csv")
+```
+
+adding 00:00:00 time to the date
+```{r}
+parks_variables$datetime <- as.POSIXct(
+  ifelse(nchar(parks_variables$datetime) == 10, 
+         paste(parks_variables$datetime, "00:00:00"), 
+         parks_variables$datetime),
+  format = "%Y-%m-%d %H:%M:%S"
+)
+refpoints_variables$datetime <- as.POSIXct(
+  ifelse(nchar(refpoints_variables$datetime) == 10,  
+         paste(refpoints_variables$datetime, "00:00:00"),  
+         refpoints_variables$datetime),
+  format = "%Y-%m-%d %H:%M:%S"
+)
+```
+
+
+1.3.1 grouping REF. POINTS into day and night according to sunset/sunrise times
+```{r}
+library(dplyr)
+library(lubridate)
+refpoints_variables <- refpoints_variables %>%
+  # ensure proper datetime conversion
+  mutate(
+    datetime = as_datetime(datetime),
+    sunrise = as_datetime(sunrise),
+    sunset = as_datetime(sunset)
+  ) %>%
+  # verify datetime columns converted properly
+  mutate(
+    datetime_valid = !is.na(datetime),
+    sunrise_valid = !is.na(sunrise),
+    sunset_valid = !is.na(sunset)
+  )
+
+# were conversions successful
+print(sum(refpoints_variables$datetime_valid))
+print(sum(refpoints_variables$sunrise_valid))
+print(sum(refpoints_variables$sunset_valid))
+
+#  time extraction using lubridate functions 
+refpoints_variables <- refpoints_variables %>%
+  mutate(
+    # extract hours and minutes using lubridate
+    time_of_day = hour(datetime) + minute(datetime)/60,
+    sunrise_time = hour(sunrise) + minute(sunrise)/60,
+    sunset_time = hour(sunset) + minute(sunset)/60
+  ) %>%
+  mutate(
+    period = case_when(
+      time_of_day >= sunrise_time & time_of_day < sunset_time ~ "day",
+      TRUE ~ "night"
+    )
+  )
+```
+
+
+1.3.2 grouping PARKS into day and night according to sunset/sunrise times
+```{r}
+library(dplyr)
+library(lubridate)
+
+parks_variables <- parks_variables %>%
+  mutate(
+    datetime = as_datetime(datetime),
+    sunrise = as_datetime(sunrise),
+    sunset = as_datetime(sunset)
+  ) %>%
+  mutate(
+    datetime_valid = !is.na(datetime),
+    sunrise_valid = !is.na(sunrise),
+    sunset_valid = !is.na(sunset)
+  )
+
+print(sum(parks_variables$datetime_valid))
+print(sum(parks_variables$sunrise_valid))
+print(sum(parks_variables$sunset_valid))
+
+parks_variables <- parks_variables %>%
+  mutate(
+    time_of_day = hour(datetime) + minute(datetime)/60,
+    sunrise_time = hour(sunrise) + minute(sunrise)/60,
+    sunset_time = hour(sunset) + minute(sunset)/60
+  ) %>%
+  mutate(
+    period = case_when(
+      time_of_day >= sunrise_time & time_of_day < sunset_time ~ "day",
+      TRUE ~ "night"
+    )
+  )
+```
+
+1.3.3 grouping into leafless and full canopy season according to the phenocam dates
+```{r}
+spring_greenup_start <- as.Date("2023-04-07")  # 10% threshold rising
+full_canopy_start <- as.Date("2023-04-30")     # 50% threshold rising
+senescence_start <- as.Date("2023-10-04")      # 50% threshold falling
+leafless_start <- as.Date("2023-11-05")        # 10% threshold falling
+
+parks_variables <- parks_variables %>%
+  mutate(
+    date = as.Date(datetime),  # extract date from datetime
+    phenophase = case_when(
+      date < spring_greenup_start | date >= leafless_start ~ "leafless",
+      date >= spring_greenup_start & date < full_canopy_start ~ "spring_transition",
+      date >= full_canopy_start & date < senescence_start ~ "full_canopy",
+      date >= senescence_start & date < leafless_start ~ "autumn_transition"
+    )
+  )
+```
+
+```{r}
+refpoints_variables <- refpoints_variables %>%
+  mutate(
+    date = as.Date(datetime),  # extract date from datetime
+    phenophase = case_when(
+      date < spring_greenup_start | date >= leafless_start ~ "leafless",
+      date >= spring_greenup_start & date < full_canopy_start ~ "spring_transition",
+      date >= full_canopy_start & date < senescence_start ~ "full_canopy",
+      date >= senescence_start & date < leafless_start ~ "autumn_transition"
+    )
+  )
+```
+
+```{r}
+#write.csv(refpoints_variables, "dobr.csv")
+#write.csv(parks_variables, "dobr1.csv")
+
+rm(list = ls())
+refpoints_variables <- read.csv("/Users/teodorica/Downloads/thesonja/R/R for the thesis/smaller_datasets/rfpoints_with_seasons.csv")
+parks_variables <- read.csv("/Users/teodorica/Downloads/thesonja/R/R for the thesis/smaller_datasets/dobr1.csv")
+```
+
+
+WIND:
+*importing wind data
+```{r}
+wind_data <- read.csv("FRCHEM_2023_WindSpeed_Hourly_UTC.csv")
+```
+*changing date format from YYYYMMDDHHMM_From to POSIXct
+```{r}
+library(lubridate)
+wind_data$YYYYMMDDHHMM_From <- ymd_hm(sub("_From", "", wind_data$YYYYMMDDHHMM_From))
+wind_data$YYYYMMDDHHMM_To <- ymd_hm(sub("_To", "", wind_data$YYYYMMDDHHMM_To))
+```
+
+check format
+```{r}
+str(wind_data$YYYYMMDDHHMM_From)
+```
+
+midnightttt
+```{r}
+# adding 00:00:00 to both datasets, since midnight is only the date for now:
+parks_variables$datetime <- as.character(parks_variables$datetime)
+parks_variables$datetime <- ifelse(
+  !grepl(":", parks_variables$datetime),  
+  paste(parks_variables$datetime, "00:00:00"),
+  parks_variables$datetime
+)
+
+# Convert with error handling
+parks_variables$datetime <- try(as.POSIXct(parks_variables$datetime, format="%Y-%m-%d %H:%M:%S"))
+# Check for any parsing errors
+any_errors <- any(inherits(parks_variables$datetime, "try-error"))
+if(any_errors) {
+  print("Warning: Some datetime conversions failed")
+}
+```
+
+```{r}
+refpoints_variables$datetime <- as.character(refpoints_variables$datetime)
+refpoints_variables$datetime <- ifelse(
+  !grepl(":", refpoints_variables$datetime), 
+  paste(refpoints_variables$datetime, "00:00:00"),
+  refpoints_variables$datetime
+)
+
+refpoints_variables$datetime <- try(as.POSIXct(refpoints_variables$datetime, format="%Y-%m-%d %H:%M:%S"))
+any_errors <- any(inherits(refpoints_variables$datetime, "try-error"))
+if(any_errors) {
+  print("Warning: Some datetime conversions failed")
+}
+```
+
+
+```{r}
+# MERGING:
+refpoints_variables <- merge(refpoints_variables, wind_data, 
+                            by.x = "datetime", by.y = "YYYYMMDDHHMM_From", 
+                            all = FALSE)
+parks_variables <- merge(parks_variables, wind_data, 
+                            by.x = "datetime", by.y = "YYYYMMDDHHMM_From", 
+                            all = FALSE)
+```
+
+```{r}
+write.csv(refpoints_variables, "refpoints_variables_wind.csv")
+write.csv(parks_variables, "parks_variables_wind.csv")
+```
+
+01.04.25 importing data again to add CR and after sunset time
+```{r}
+rm(list=ls())
+refpoints_variables <- read.csv("/Users/teodorica/Downloads/thesonja/R/R for the thesis/smaller_datasets/refpoints_variables_wind.csv")
+parks_variables <- read.csv("/Users/teodorica/Downloads/thesonja/R/R for the thesis/smaller_datasets/parks_variables_wind.csv")
+```
+
+```{r}
+refpoints_variables$datetime <- as.character(refpoints_variables$datetime)
+refpoints_variables$datetime <- ifelse(
+  !grepl(":", refpoints_variables$datetime),  # Better check for time component
+  paste(refpoints_variables$datetime, "00:00:00"),
+  refpoints_variables$datetime
+)
+
+parks_variables$datetime <- as.character(parks_variables$datetime)
+parks_variables$datetime <- ifelse(
+  !grepl(":", parks_variables$datetime),  # Better check for time component
+  paste(parks_variables$datetime, "00:00:00"),
+  parks_variables$datetime
+)
+```
+
+
+# Calculating COOLING RATE PER HOUR: 
+```{r}
+# is data properly sorted
+refpoints_variables <- refpoints_variables %>%
+  group_by(station_id) %>%  # each station is handled individually!
+  arrange(datetime) %>%
+  ungroup()
+
+# calculate cooling rates with special attention to midnight transitions
+# Using previous hour - current hour
+refpoints_variables <- refpoints_variables %>%
+  group_by(station_id) %>%
+  mutate(
+    current_date = as.Date(datetime),
+    current_hour = time_of_day,
+    
+    # Get PREVIOUS measurements
+    prev_datetime = lag(datetime),
+    prev_hour = lag(time_of_day),
+    prev_date = as.Date(prev_datetime),
+    prev_temp = lag(ta),
+    
+    # flag midnight transitions
+    is_midnight_transition = (prev_hour == 23 & current_hour == 0),
+    
+    hour_diff = case_when(
+      # At midnight transition, explicitly set to 1 hour
+      is_midnight_transition ~ 1,
+      
+      # consecutive readings on the same day
+      current_date == prev_date ~ current_hour - prev_hour,
+      
+      # For other cross-day transitions that aren't midnight
+      !is_midnight_transition & current_date != prev_date ~ current_hour + 24 - prev_hour,
+      
+      # Handle missing previous readings
+      is.na(prev_hour) ~ NA_real_,
+    
+      TRUE ~ as.numeric(difftime(datetime, prev_datetime, units = "hours"))
+    ),
+      
+    # CALCULATION: cooling rate as (previous temp - current temp) / time difference (1)
+    cooling_rate = (prev_temp - ta) / hour_diff,
+    
+    # issues?
+    cooling_rate = ifelse(is.infinite(cooling_rate) | is.na(cooling_rate), NA, cooling_rate)
+  ) %>%
+  ungroup()
+```
+
+
+```{r}
+parks_variables <- parks_variables %>%
+  group_by(station_id) %>%
+  arrange(datetime) %>%
+  ungroup()
+
+parks_variables <- parks_variables %>%
+  group_by(station_id) %>%
+  mutate(
+    current_date = as.Date(datetime),
+    current_hour = time_of_day,
+    
+    prev_datetime = lag(datetime),
+    prev_hour = lag(time_of_day),
+    prev_date = as.Date(prev_datetime),
+    prev_temp = lag(ta),
+    
+    is_midnight_transition = (prev_hour == 23 & current_hour == 0), # flag midnight transition
+    
+    # Calculate time difference with explicit handling for all cases
+    hour_diff = case_when(
+      # At midnight transition, explicitly set to 1 hour
+      is_midnight_transition ~ 1,
+      
+      # For consecutive readings on the same day
+      current_date == prev_date ~ current_hour - prev_hour,
+      
+      # For other cross-day transitions that aren't midnight
+      !is_midnight_transition & current_date != prev_date ~ current_hour + 24 - prev_hour,
+      
+      # Handle missing previous readings
+      is.na(prev_hour) ~ NA_real_,
+      
+      TRUE ~ as.numeric(difftime(datetime, prev_datetime, units = "hours"))
+    ),
+    
+    # CALCULATION: cooling rate as (previous temp - current temp) / time difference
+    cooling_rate = (prev_temp - ta) / hour_diff,
+    
+    # issues?
+    cooling_rate = ifelse(is.infinite(cooling_rate) | is.na(cooling_rate), NA, cooling_rate)
+  ) %>%
+  ungroup()
+```
+
+
+# AFTER SUNSET TIME:
+```{r}
+parks_variables <- parks_variables %>%
+  mutate(
+    # Get sunset time as a POSIXct object
+    sunset_posix = as.POSIXct(sunset, format="%Y-%m-%d %H:%M:%S"),
+    sunset_hour = hour(sunset_posix),
+    sunset_minute = minute(sunset_posix),
+    
+    # Determine which hour to use as "sunset hour" based on when sunset occurs
+    # If sunset is at 20:45, we might want to consider 21:00 as the sunset hour
+    sunset_reference_hour = ifelse(sunset_minute >= 30, sunset_hour + 1, sunset_hour),
+    
+    # Calculate integer hour difference from sunset reference hour using existing time_of_day
+    time_after_sunset = case_when(
+      time_of_day >= sunset_reference_hour ~ time_of_day - sunset_reference_hour,
+      time_of_day < sunset_reference_hour ~ time_of_day + 24 - sunset_reference_hour
+    )
+  )
+```
+
+```{r}
+refpoints_variables <- refpoints_variables %>%
+  mutate(
+    sunset_posix = as.POSIXct(sunset, format="%Y-%m-%d %H:%M:%S"),
+    sunset_hour = hour(sunset_posix),
+    sunset_minute = minute(sunset_posix),
+    
+    sunset_reference_hour = ifelse(sunset_minute >= 30, sunset_hour + 1, sunset_hour),
+    
+    time_after_sunset = case_when(
+      time_of_day >= sunset_reference_hour ~ time_of_day - sunset_reference_hour,
+      time_of_day < sunset_reference_hour ~ time_of_day + 24 - sunset_reference_hour
+    )
+  )
+```
+
+```{r}
+write.csv(parks_variables, "parks_variables_withCR.csv")
+write.csv(refpoints_variables, "refpoints_variables_withCR.csv")
+```
+end of adding variables...
+
+
+
+EXCLUDING unnecessary variables
+```{r}
+parks_variables <- parks_variables[, !(names(parks_variables) %in% c("X", "STATIONS_ID", "MESS_DATUM", "QN_8", "eor", "WindSpeed_missing_data_percent", "WindSpeed_gap_filled_percent", "WindSpeed_missing_data_percent", "X.y", "X.1", "X.x", "X", "datetime_valid", "sunrise_valid", "sunset_valid", "sunset_time", "sunrise_time", "Year.x", "Year.y", "Hour.x", "Hour.y", "Month.x", "Month.y", "sunset_posix", "sunset_hour", "sunset_minute", "sunset_reference_hour", "is_midnight_transition", "hour_diff", "prev_datetime", "prev_hour", "prev_date", "prev_temp", "current_date", "current_hour"))]
+
+refpoints_variables <- refpoints_variables[, !(names(refpoints_variables) %in% c("X", "STATIONS_ID", "MESS_DATUM", "QN_8", "eor", "WindSpeed_missing_data_percent", "WindSpeed_gap_filled_percent", "WindSpeed_missing_data_percent", "X.y", "X.1", "X.x", "X", "datetime_valid", "sunrise_valid", "sunset_valid", "sunset_time", "sunrise_time", "Year.x", "Year.y", "Hour.x", "Hour.y", "Month.x", "Month.y", "sunset_posix", "sunset_hour", "sunset_minute", "sunset_reference_hour", "is_midnight_transition", "hour_diff", "prev_datetime", "prev_hour", "prev_date", "prev_temp", "current_date", "current_hour"))]
+```
+
+
+1.4.1 extracting my reference points
+```{r}
+# getting individual reference points
+library(dplyr)
+FRBETZ <- as.data.frame(refpoints_variables %>%
+  filter(station_id == "FRBETZ") %>%
+  arrange(datetime))
+
+FRINST <- as.data.frame(refpoints_variables %>%
+  filter(station_id == "FRINST") %>%
+  arrange(datetime))
+
+FRUNIK <- as.data.frame(refpoints_variables %>%
+  filter(station_id == "FRUNIK") %>%
+  arrange(datetime))
+
+FRKART <- as.data.frame(refpoints_variables %>%
+  filter(station_id == "FRKART") %>%
+  arrange(datetime))
+
+FRHERD <- as.data.frame(refpoints_variables %>%
+  filter(station_id == "FRHERD") %>%
+  arrange(datetime))
+
+FRMESS <- as.data.frame(refpoints_variables %>%
+  filter(station_id == "FRMESS") %>%
+  arrange(datetime))
+```
+
+1.4.2 extracting my parks
+* with arrange() I make the datasets in the same order because after suncalc functions, the dates were completely mixed
+```{r}
+# getting individual parks
+FRSTGA <- as.data.frame(parks_variables %>%
+  filter(station_id == "FRSTGA") %>%
+  arrange(datetime))
+
+FRFRIE <- as.data.frame(parks_variables %>%
+  filter(station_id == "FRFRIE") %>%
+  arrange(datetime))
+
+FRSEEP <- as.data.frame(parks_variables %>%
+  filter(station_id == "FRSEEP") %>%
+  arrange(datetime))
+
+FRHOCH <- as.data.frame(parks_variables %>%
+  filter(station_id == "FRHOCH") %>%
+  arrange(datetime))
+
+FRDIET <- as.data.frame(parks_variables %>%
+  filter(station_id == "FRDIET") %>%
+  arrange(datetime))
+```
+
+
+# TEMP_DIFFERENCE park vs. built-up area
+```{r}
+# FRSTGA
+FRSTGA$temp_diff_KART <- FRKART$ta - FRSTGA$ta
+range(FRSTGA$temp_diff_KART)
+FRSTGA$temp_diff_INST <- FRINST$ta - FRSTGA$ta
+range(FRSTGA$temp_diff_INST)
+FRSTGA$temp_diff_HERD <- FRHERD$ta - FRSTGA$ta
+range(FRSTGA$temp_diff_HERD)
+```
+
+```{r}
+# FRSEEP
+FRSEEP$temp_diff <- FRBETZ$ta - FRSEEP$ta
+range(FRSEEP$temp_diff)
+```
+
+```{r}
+# FRFRIE
+FRFRIE$temp_diff_UNIK <- FRUNIK$ta - FRFRIE$ta
+range(FRFRIE$temp_diff_UNIK)
+FRFRIE$temp_diff_MESS <- FRMESS$ta - FRFRIE$ta
+range(FRFRIE$temp_diff_MESS)
+```
+
+
+2.1 writing excel files
+```{r}
+write.csv(FRSTGA, "FRSTGA.csv")
+write.csv(FRFRIE, "FRFRIE.csv")
+write.csv(FRSEEP, "FRSEEP.csv")
+write.csv(FRHOCH, "FRHOCH.csv")
+write.csv(FRDIET, "FRDIET.csv")
+
+write.csv(FRBETZ, "FRBETZ.csv")
+write.csv(FRINST, "FRINST.csv")
+write.csv(FRUNIK, "FRUNIK.csv")
+write.csv(FRKART, "FRKART.csv")
+write.csv(FRHERD, "FRHERD.csv")
+write.csv(FRMESS, "FRMESS.csv")
+
+```
