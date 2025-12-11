@@ -5,8 +5,7 @@ Temporal analysis of urban park cooling effects in Freiburg, Germany, using hour
 *Caution: code and repo in progress!*
 
 ## Table of Content
-1. [Processing datasets](R_notebooks/import_data_into_smaller.Rmd)
-Following datasets were used:
+1. [Processing datasets](R_notebooks/import_data_into_smaller.Rmd), using following datasets:
 - Air temperature data from weather-measuring stations [Plein et al. (2024)](https://doi.org/10.5281/zenodo.1273255)
 - Cloud cover - [DWD data](https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/subdaily/cloudiness) and [cloud camera images](https://zenodo.org/records/14603730)
 - Wind speed - Internal dataset from University of Freiburg
