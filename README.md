@@ -11,7 +11,7 @@ Following datasets were used:
 - Cloud cover - [DWD data](https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/subdaily/cloudiness) and [cloud camera images](https://zenodo.org/records/14603730)
 - Wind speed - Internal dataset from University of Freiburg
 - Heat warning days - [DWD data](https://opendata.dwd.de/climate_environment/health/historical_alerts/heat_warnings/)
-- Phenophase - [PhenoCam Hartheim](https://phenocam.nau.edu/webcam/roi/hartheim3/DB_1000/)
+- Phenophase - [PhenoCam Network Hartheim](https://phenocam.nau.edu/webcam/roi/hartheim3/DB_1000/)
 
 3. [Temperature differences by phenophase (built-up area-park)](R_notebooks/visualisations/temp_diff_boxplots)
 4. [Bootstrapping nighttime cooling rates, park vs. built-up area](R_notebooks/analysis/BS_CR_builtup_areas.Rmd)
