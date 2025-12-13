@@ -1,0 +1,309 @@
+---
+title: "Violin plots: Weather condition influence on cooling rates of parks and HOCH"
+output: pdf
+---
+
+the data
+'high' days
+```{r}
+rm(list=ls())
+FRSTGA <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRSTGA.csv")
+FRFRIE <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRFRIE.csv")
+FRSEEP <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRSEEP.csv")
+FRHOCH <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRHOCH.csv")
+# lists of high/low days in 2023
+highhigh_days <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/violins/highhigh2_days.csv") 
+lowlow_days <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/violins/lowlow3_days.csv")
+```
+
+the midnight thing
+```{r}
+FRSTGA$datetime <- as.POSIXct(
+  ifelse(nchar(FRSTGA$datetime) == 10,  
+         paste(FRSTGA$datetime, "00:00:00"),
+         FRSTGA$datetime),
+  format = "%Y-%m-%d %H:%M:%S"
+)
+FRSEEP$datetime <- as.POSIXct(
+  ifelse(nchar(FRSEEP$datetime) == 10,  
+         paste(FRSEEP$datetime, "00:00:00"),
+         FRSEEP$datetime),
+  format = "%Y-%m-%d %H:%M:%S"
+)
+FRFRIE$datetime <- as.POSIXct(
+  ifelse(nchar(FRFRIE$datetime) == 10,  
+         paste(FRFRIE$datetime, "00:00:00"),
+         FRFRIE$datetime),
+  format = "%Y-%m-%d %H:%M:%S"
+)
+FRHOCH$datetime <- as.POSIXct(
+  ifelse(nchar(FRHOCH$datetime) == 10,  
+         paste(FRHOCH$datetime, "00:00:00"),
+         FRHOCH$datetime),
+  format = "%Y-%m-%d %H:%M:%S"
+)
+```
+
+min-max scaling for CRs
+```{r}
+library(dplyr)
+FRSTGA <- FRSTGA %>%
+  mutate(CR_scaled = (cooling_rate - min(cooling_rate, na.rm = TRUE)) / 
+                     (max(cooling_rate, na.rm = TRUE) - min(cooling_rate, na.rm = TRUE)))
+FRSEEP <- FRSEEP %>%
+  mutate(CR_scaled = (cooling_rate - min(cooling_rate, na.rm = TRUE)) / 
+                     (max(cooling_rate, na.rm = TRUE) - min(cooling_rate, na.rm = TRUE)))
+FRFRIE <- FRFRIE %>%
+  mutate(CR_scaled = (cooling_rate - min(cooling_rate, na.rm = TRUE)) / 
+                     (max(cooling_rate, na.rm = TRUE) - min(cooling_rate, na.rm = TRUE)))
+FRHOCH <- FRHOCH %>%
+  mutate(CR_scaled = (cooling_rate - min(cooling_rate, na.rm = TRUE)) / 
+                     (max(cooling_rate, na.rm = TRUE) - min(cooling_rate, na.rm = TRUE)))
+```
+
+filter to low or high days only
+```{r}
+STGA_low <- FRSTGA[as.Date(FRSTGA$datetime) %in% lowlow_days$date, ]
+SEEP_low <- FRSEEP[as.Date(FRSEEP$datetime) %in% lowlow_days$date, ]
+FRIE_low <- FRFRIE[as.Date(FRFRIE$datetime) %in% lowlow_days$date, ]
+HOCH_low <- FRHOCH[as.Date(FRHOCH$datetime) %in% lowlow_days$date, ]
+```
+
+```{r}
+STGA_high <- FRSTGA[as.Date(FRSTGA$datetime) %in% highhigh_days$date, ]
+SEEP_high <- FRSEEP[as.Date(FRSEEP$datetime) %in% highhigh_days$date, ]
+FRIE_high <- FRFRIE[as.Date(FRFRIE$datetime) %in% highhigh_days$date, ]
+HOCH_high <- FRHOCH[as.Date(FRHOCH$datetime) %in% highhigh_days$date, ]
+```
+
+```{r}
+STGAhigh_8 <- STGA_high[STGA_high$time_after_sunset <= 8, ]
+SEEPhigh_8 <- SEEP_high[SEEP_high$time_after_sunset <= 8, ]
+FRIEhigh_8 <- FRIE_high[FRIE_high$time_after_sunset <= 8, ]
+HOCHhigh_8 <- HOCH_high[HOCH_high$time_after_sunset <= 8, ]
+
+STGAlow_8 <- STGA_low[STGA_low$time_after_sunset <= 8, ]
+SEEPlow_8 <- SEEP_low[SEEP_low$time_after_sunset <= 8, ]
+FRIElow_8 <- FRIE_low[FRIE_low$time_after_sunset <= 8, ]
+HOCHlow_8 <- HOCH_low[HOCH_low$time_after_sunset <= 8, ]
+```
+
+
+removing outliers
+```{r}
+remove_outliers <- function(data, column_name) {
+  q1 <- quantile(data[[column_name]], 0.25, na.rm = TRUE)
+  q3 <- quantile(data[[column_name]], 0.75, na.rm = TRUE)
+  iqr <- q3 - q1
+  
+  lower_bound <- q1 - 1.5 * iqr
+  upper_bound <- q3 + 1.5 * iqr
+  
+  return(subset(data, data[[column_name]] >= lower_bound & data[[column_name]] <= upper_bound))
+}
+
+FRIEhigh_8_filtered <- remove_outliers(FRIEhigh_8, "CR_scaled")
+FRIElow_8_filtered <- remove_outliers(FRIElow_8, "CR_scaled")
+
+SEEPlow_8_filtered <- remove_outliers(SEEPlow_8, "CR_scaled")
+SEEPhigh_8_filtered <- remove_outliers(SEEPhigh_8, "CR_scaled")
+
+STGAhigh_8_filtered <- remove_outliers(STGAhigh_8, "CR_scaled")
+STGAlow_8_filtered <- remove_outliers(STGAlow_8, "CR_scaled")
+
+HOCHhigh_8_filtered <- remove_outliers(HOCHhigh_8, "CR_scaled")
+HOCHlow_8_filtered <- remove_outliers(HOCHlow_8, "CR_scaled")
+```
+
+sa tackicama, 3 plots, weather conditions together:
+```{r}
+library(ggplot2)
+library(patchwork)
+library(gridExtra)
+library(svglite)
+
+create_combined_plot <- function(high_data, low_data, park_name, 
+                                theme_fill, high_border, low_border,
+                                y_min, y_max) {
+  # include only the first 8 hours after sunset
+  high_filtered <- subset(high_data, time_after_sunset <= 8)
+  low_filtered <- subset(low_data, time_after_sunset <= 8)
+  
+  # Hour groups (0-1)
+  high_filtered$hour_group <- factor(floor(high_filtered$time_after_sunset),
+                                    levels = 0:8,
+                                    labels = 0:8)
+  
+  low_filtered$hour_group <- factor(floor(low_filtered$time_after_sunset),
+                                   levels = 0:8,
+                                   labels = 0:8)
+  
+  # Add condition column to each dataset
+  high_filtered$condition <- "High Wind/Cloud Cover"
+  low_filtered$condition <- "Low Wind/Cloud Cover"
+  
+  # Calculate mean values for each hour and condition for diamond placement
+  hour_means <- rbind(
+    aggregate(CR_scaled ~ hour_group, high_filtered, mean),
+    aggregate(CR_scaled ~ hour_group, low_filtered, mean)
+  )
+  
+  # Combine the datasets
+  combined_data <- rbind(high_filtered, low_filtered)
+  
+  # Create combined plot
+  plot <- ggplot(combined_data, aes(x = hour_group, y = CR_scaled, fill = condition, color = condition)) +
+    # Add violin plot with adjusted position dodge and width for wider violins
+    geom_violin(position = position_dodge(width = 0.8), 
+                alpha = 0.7, 
+                width = 1.2,            # Width to prevent overlap
+                scale = "width",        # Ensure violins are properly scaled
+                trim = FALSE) +         # Don't trim the tails
+    
+    # Add boxplot inside the violin for quartiles (without mean diamonds)
+    geom_boxplot(width = 0.2, position = position_dodge(width = 0.8), 
+                alpha = 0.7, fill = "white", outlier.shape = NA) +
+    
+    # Add jittered points for individual data points
+    geom_jitter(position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.8),
+                size = 0.7, alpha = 0.25) +
+    
+    # Customize colors: same fill but different borders for high/low conditions
+    scale_fill_manual(values = c("High Wind/Cloud Cover" = theme_fill, "Low Wind/Cloud Cover" = theme_fill)) +
+    scale_color_manual(values = c("High Wind/Cloud Cover" = high_border, "Low Wind/Cloud Cover" = low_border)) +
+    
+    # Enforce common y-axis limits
+    coord_cartesian(ylim = c(y_min, y_max)) +
+    
+    # Customize appearance
+    labs(
+      title = paste0(park_name),  
+      x = "Hours After Sunset",
+      y = expression(paste("Cooling Rate (K/h)"))  # Using expression for proper superscript
+    ) +
+    
+    # Use a clean theme with minimal internal lines
+    theme_minimal() +
+    
+    # Customize theme elements
+    theme(
+  plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+  axis.title = element_text(size = 10),
+  axis.title.x = element_text(margin = margin(t = 10, r = 0, b = 0, l = 0)),
+  axis.title.y = element_text(margin = margin(t = 0, r = 10, b = 0, l = 0)),
+  axis.text = element_text(size = 9),
+  legend.position = "bottom",
+  legend.title = element_blank(),
+  legend.text = element_text(size = 9),
+  legend.margin = margin(t = 0, r = 0, b = 0, l = 0),
+  plot.margin = margin(t = 5, r = 10, b = 5, l = 10),
+  # Remove aspect.ratio to let plots fill available space
+  # aspect.ratio = 0.6,
+  panel.grid.minor = element_blank(),
+  panel.grid.major = element_line(color = "gray", size = 0.2, linetype = "dotted"),
+  panel.border = element_rect(color = "black", fill = NA, size = 0.5)
+)
+  
+  # Add mean diamonds for each hour (one between the violins)
+  for (i in 0:8) {
+    # Calculate overall mean for this hour (combined high and low)
+    hour_data <- subset(combined_data, hour_group == i)
+    if (nrow(hour_data) > 0) {
+      mean_val <- mean(hour_data$CR_scaled, na.rm = TRUE)
+      
+      # Add a diamond at the center of the hour position
+      plot <- plot + 
+        annotate("point", x = i + 1, y = mean_val,  # i+1 because factor levels start at 1
+                shape = 23, size = 2, fill = "white", color = "black")
+    }
+  }
+  
+  return(plot)
+}
+
+# Determine global y-axis limits to use across all plots
+all_data <- rbind(
+  data.frame(CR = STGAhigh_8_filtered$CR_scaled, park = "STGA", condition = "High"),
+  data.frame(CR = STGAlow_8_filtered$CR_scaled, park = "STGA", condition = "Low"),
+  data.frame(CR = FRIEhigh_8_filtered$CR_scaled, park = "FRIE", condition = "High"),
+  data.frame(CR = FRIElow_8_filtered$CR_scaled, park = "FRIE", condition = "Low"),
+  data.frame(CR = SEEPhigh_8_filtered$CR_scaled, park = "SEEP", condition = "High"),
+  data.frame(CR = SEEPlow_8_filtered$CR_scaled, park = "SEEP", condition = "Low"),
+  data.frame(CR = HOCHhigh_8_filtered$CR_scaled, park = "HOCH", condition = "High"),
+  data.frame(CR = HOCHlow_8_filtered$CR_scaled, park = "HOCH", condition = "Low")
+)
+
+# set y-axis limits
+y_min <- 0.3
+y_max <- 0.7
+
+# stga
+stga_colors <- list(
+  theme_fill = "#a5d6a7",   
+  high_border = "#66bb6a",  
+  low_border = "#2e7d32"   
+)
+
+# frie
+frie_colors <- list(
+  theme_fill = "lightsalmon",  
+  high_border = "darksalmon",   
+  low_border = "salmon3"  
+)
+
+# seep
+seep_colors <- list(
+  theme_fill = "lightsteelblue", 
+  high_border = "cornflowerblue",     
+  low_border = "steelblue"   
+)
+
+# hoch
+hoch_colors <- list(
+  theme_fill = "#b8e986",   
+  high_border = "#8bc34a",  
+  low_border = "#689f38"     
+)
+
+
+STGA_plot <- create_combined_plot(
+  STGAhigh_8_filtered, STGAlow_8_filtered, "STGA (Park C)", 
+  stga_colors$theme_fill, stga_colors$high_border, stga_colors$low_border,
+  y_min, y_max
+)
+
+FRIE_plot <- create_combined_plot(
+  FRIEhigh_8_filtered, FRIElow_8_filtered, "FRIE (Park B)", 
+  frie_colors$theme_fill, frie_colors$high_border, frie_colors$low_border,
+  y_min, y_max
+)
+
+SEEP_plot <- create_combined_plot(
+  SEEPhigh_8_filtered, SEEPlow_8_filtered, "SEEP (Park A)", 
+  seep_colors$theme_fill, seep_colors$high_border, seep_colors$low_border,
+  y_min, y_max
+)
+
+HOCH_plot <- create_combined_plot(
+  HOCHhigh_8_filtered, HOCHlow_8_filtered, "HOCH (Rural Site)", 
+  hoch_colors$theme_fill, hoch_colors$high_border, hoch_colors$low_border,
+  y_min, y_max
+)
+
+# common title 
+#title <- ggplot() + 
+#  annotate("text", x = 0, y = 0, 
+#           label = "Cooling Rate Comparison − Impact of Wind/Cloud Cover Conditions", 
+#           size = 5, fontface = "bold") + 
+#  theme_void() +
+#  theme(
+#    plot.margin = margin(b = 15, t = 5)
+#  )
+
+combined_plots <- ( (SEEP_plot + FRIE_plot) / (STGA_plot + HOCH_plot) ) +
+  plot_layout(heights = c(1, 1))
+
+png("/Users/teodorica/Downloads/papr/R/atmosfr/violins/park_CRs_violins.png", width = 10, height = 8, pointsize = 10, res = 600, units = "in") 
+print(combined_plots)
+dev.off()
+```
