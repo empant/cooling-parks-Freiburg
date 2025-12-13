@@ -1,5 +1,5 @@
 # Cooling Effects and Rates of Parks in Freiburg WIP
-Temporal analysis of urban park cooling effects in Freiburg, Germany, using hourly air temperature data from 2023.
+Temporal analysis of cooling effects rates of three parks in Freiburg, Germany (Seepark, Hauptfriedhof, Stadtgarten), using hourly air temperature data from 2023.
 
 
 ## Table of Content
