@@ -13,5 +13,5 @@ Temporal analysis of urban park cooling effects in Freiburg, Germany, using hour
 3. [Temperature differences by phenophase (built-up area-park)](R_notebooks/visualisations/temp_diff_boxplots)
 4. [Bootstrapping nighttime cooling rates, park vs. built-up area](R_notebooks/analysis/BS_CR_builtup_areas.Rmd)
 5. [ANOVA on nighttime cooling rates between parks](R_notebooks/analysis/anova_CR.Rmd)
-6. [Impact of meteorological conditions on cooling rates of parks](R_notebooks/visualisations/violins_weather_conditions)
+6. [Impact of weather conditions on cooling rates of parks](R_notebooks/visualisations/violins_weather_conditions)
 7. [Heatwave analysis on nighttime cooling](R_notebooks/visualisations/heatwave_analysis)
