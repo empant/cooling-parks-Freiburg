@@ -4,7 +4,7 @@ Temporal analysis of cooling effects rates of three parks in Freiburg, Germany (
 
 ## Table of Content
 1. [Processing initial datasets](R_notebooks/import_data_into_smaller.Rmd), using following data:
-- Air temperature data from weather-measuring stations [Plein et al. (2024)](https://doi.org/10.5281/zenodo.1273255)
+- Air temperature data from weather-measuring stations in Freiburg [Plein et al. (2024)](https://doi.org/10.5281/zenodo.1273255)
 - Cloud cover - [DWD data](https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/subdaily/cloudiness) and [cloud camera images](https://zenodo.org/records/14603730)
 - Wind speed - Internal dataset from University of Freiburg
 - Heat warning days - [DWD data](https://opendata.dwd.de/climate_environment/health/historical_alerts/heat_warnings/)
