@@ -1,0 +1,407 @@
+---
+title: "New temperature differences WITH BOTH BUILT UP AREA AT ONE"
+output: html_notebook
+---
+
+import data
+```{r}
+rm(list=ls())
+STGA <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRSTGA.csv")
+KART <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRKART.csv")
+INST <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRINST.csv")
+FRIE <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRFRIE.csv")
+MESS <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRMESS.csv")
+UNIK <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRUNIK.csv")
+SEEP <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRSEEP.csv")
+BETZ <- read.csv("/Users/teodorica/Downloads/papr/R/atmosfr/sites/FRBETZ.csv")
+```
+
+hours are 0-23
+```{r}
+range(STGA$Hour)
+```
+
+function!
+```{r}
+create_dual_temp_diff_plots <- function(
+  data,                           
+  output_file,                    
+  temp_diff_cols,                 
+  temp_diff_labels,               
+  park_name,                      
+  built_up_name = "Built-up Area",
+  group_col = "Hour",             
+  season_col = "phenophase",      
+  season_value = "full canopy",   
+  plot_colors = c("lightblue", "lightcoral"),
+  box_border_colors = "black",
+  grid_color = "gray",
+  grid_lty = "dotted",
+  grid_lwd = 0.7,
+  background_below_zero = rgb(0.95, 0.95, 0.95),
+  zero_line_color = "red",
+  zero_line_lty = 2,
+  y_limits = c(-5, 5),
+  x_label = "Hour of Day",
+  y_label = NULL,
+  add_text_boxes = TRUE,
+  box_width = 0.6,
+  outlier_size = 0.5,
+  single_variable = FALSE
+) {
+
+  # Default y-axis label
+  if (is.null(y_label)) {
+    y_label <- bquote(italic(Delta*T) * " (K)")
+  }
+
+  # Input validation
+  if (length(temp_diff_cols) != 2) stop("temp_diff_cols must contain exactly 2 names.")
+  if (length(temp_diff_labels) != 2) stop("temp_diff_labels must contain exactly 2 labels.")
+  if (length(plot_colors) != 2) stop("plot_colors must have exactly 2 colors.")
+
+  if (length(box_border_colors) == 1) {
+    box_border_colors <- rep(box_border_colors, 2)
+  }
+
+  # Hours always 0–23 in data
+  hours <- 0:23
+
+  # Filter by season
+  season_data <- data[data[[season_col]] == season_value, ]
+  if (nrow(season_data) == 0) stop("No data found for season: ", season_value)
+
+  # Output file
+  png(output_file, width = 9, height = 7, units = "in", pointsize = 14, res = 600)
+
+  # Layout
+  par(mfrow = c(1, 1), mar = c(4, 4, 4, 1))
+
+  box_offset <- box_width * 0.3
+
+  # Empty plot
+  plot(1, type = "n",
+       xlim = c(-0.5, 23.5),
+       ylim = y_limits,
+       xlab = x_label,
+       ylab = y_label,
+       axes = FALSE)
+  
+  ## ✅ Correct, non-shifted hour labels
+  axis(1, at = 0:23, labels = 0:23, cex.axis = 0.7)
+  axis(2, at = seq(y_limits[1], y_limits[2], by = 1),
+       las = 1, cex.axis = 0.8)
+
+  # Background below zero
+  rect(par("usr")[1], y_limits[1], par("usr")[2], 0,
+       col = background_below_zero, border = NA)
+
+  # Horizontal grid
+  abline(h = seq(y_limits[1], y_limits[2], by = 0.5),
+         col = grid_color, lty = grid_lty, lwd = grid_lwd)
+
+  # Draw boxplots for each hour
+  for (h in hours) {
+
+    data1 <- season_data[season_data[[group_col]] == h, temp_diff_cols[1]]
+    data1 <- data1[!is.na(data1)]
+
+    if (!single_variable) {
+      data2 <- season_data[season_data[[group_col]] == h, temp_diff_cols[2]]
+      data2 <- data2[!is.na(data2)]
+    } else {
+      data2 <- numeric(0)
+    }
+
+    if (length(data1) == 0 && length(data2) == 0) next
+
+    pos1 <- h - box_offset
+    pos2 <- h + box_offset
+
+    if (length(data1) > 0) {
+      boxplot(data1, at = pos1, add = TRUE, axes = FALSE,
+              col = plot_colors[1], border = box_border_colors[1],
+              boxwex = box_width, outline = TRUE, outcex = outlier_size)
+    }
+
+    if (length(data2) > 0) {
+      boxplot(data2, at = pos2, add = TRUE, axes = FALSE,
+              col = plot_colors[2], border = box_border_colors[2],
+              boxwex = box_width, outline = TRUE, outcex = outlier_size)
+    }
+  }
+
+  # text boxes
+  if (add_text_boxes) {
+    # Upper box
+    label_upper <- bquote(italic(Delta*T) * " > 0: " * .(built_up_name) * " around park " * .(park_name) * " is warmer.")
+    twu <- strwidth(label_upper, cex = 0.9) * 1.2
+    thu <- strheight(label_upper, cex = 0.9) * 1.8
+    rect(0, y_limits[2] - 0.5 - thu/2, twu, y_limits[2] - 0.5 + thu/2,
+         col = "white", border = "black")
+    text(twu/2, y_limits[2] - 0.5, label_upper, cex = 0.9)
+
+    # Lower box
+    label_lower <- bquote(italic(Delta*T) * " < 0: Park " * .(park_name) * " is warmer.")
+    twl <- strwidth(label_lower, cex = 0.9) * 1.2
+    thl <- strheight(label_lower, cex = 0.9) * 1.8
+    rect(0, y_limits[1] + 0.5 - thl/2, twl, y_limits[1] + 0.5 + thl/2,
+         col = "white", border = "black")
+    text(twl/2, y_limits[1] + 0.5, label_lower, cex = 0.9)
+  }
+
+  # Zero line
+  abline(h = 0, lwd = 1.5, lty = zero_line_lty, col = zero_line_color)
+
+  # Legend
+  legend("topright",
+         legend = temp_diff_labels,
+         fill = plot_colors,
+         border = box_border_colors,
+         bg = "white",
+         cex = 0.9)
+
+  box()
+  dev.off()
+
+  cat("Plot saved to:", output_file, "\n")
+}
+```
+
+
+
+STGA - INST & KART full canopy
+```{r}
+create_dual_temp_diff_plots(
+  data = STGA,
+  output_file = "STGA_temp_differences_full_canopy.png",
+  temp_diff_cols = c("temp_diff_INST", "temp_diff_KART"),
+  temp_diff_labels = c("INST-STGA", "KART-STGA"),
+  park_name = "C",
+  built_up_name = "Built-up area",
+  season_value = "full_canopy",
+  plot_colors = c("darkgreen", "darkseagreen3"),
+  y_limits = c(-5, 6)  
+)
+```
+
+STGA - INST & KART leafless
+```{r}
+create_dual_temp_diff_plots(
+  data = STGA,
+  output_file = "STGA_temp_differences_leafless.png",   
+  temp_diff_cols = c("temp_diff_INST", "temp_diff_KART"),
+  temp_diff_labels = c("INST-STGA", "KART-STGA"),
+  park_name = "C",
+  built_up_name = "Built-up area",
+  season_value = "leafless",
+  plot_colors = c("darkgreen", "darkseagreen3"),
+  y_limits = c(-5, 6)  
+)
+```
+
+
+FRIE - MESS & UNIK full canopy
+```{r}
+create_dual_temp_diff_plots(
+  data = FRIE,
+  output_file = "FRIE_temp_differences_full_canopy.png", 
+  temp_diff_cols = c("temp_diff_MESS", "temp_diff_UNIK"),
+  temp_diff_labels = c("MESS-FRIE", "UNIK-FRIE"),
+  park_name = "B",
+  built_up_name = "Built-up area",
+  season_value = "full_canopy",
+  plot_colors = c("salmon3", "darksalmon"),
+  y_limits = c(-5, 5)  
+)
+```
+
+FRIE - MESS & UNIK leafless
+```{r}
+create_dual_temp_diff_plots(
+  data = FRIE,
+  output_file = "FRIE_temp_differences_leafless.png", 
+  temp_diff_cols = c("temp_diff_MESS", "temp_diff_UNIK"),
+  temp_diff_labels = c("MESS-FRIE", "UNIK-FRIE"),
+  park_name = "B",
+  built_up_name = "Built-up area",
+  season_value = "leafless",
+  plot_colors = c("salmon3", "darksalmon"),
+  y_limits = c(-5, 5)  
+)
+```
+
+SEEP
+one boxplot function since SEEP has only one built-up reference site:
+```{r}
+create_single_temp_diff_plot <- function(
+  data,                           
+  output_file,                    
+  temp_diff_col,                  
+  temp_diff_label,               
+  park_name,                      
+  built_up_name = "Built-up Area",
+  group_col = "Hour",             
+  season_col = "phenophase",      
+  season_value = "full canopy",   
+  plot_color = "cornflowerblue",  
+  box_border_color = "black",     
+  grid_color = "gray",            
+  grid_lty = "dotted",            
+  grid_lwd = 0.7,                 
+  background_below_zero = rgb(0.95, 0.95, 0.95), 
+  zero_line_color = "red",        
+  zero_line_lty = 2,              
+  y_limits = c(-5, 5),            
+  x_label = "Hour of Day",        
+  y_label = NULL,                 
+  add_text_boxes = TRUE,          
+  box_width = 0.6,
+  outlier_size = 0.5              
+) {
+
+  if (is.null(y_label)) {
+    y_label <- bquote(italic(Delta*T) * " (K)")
+  }
+
+  # Hours always 0–23
+  hours <- 0:23
+
+  # Filter by season
+  season_data <- data[data[[season_col]] == season_value, ]
+  if (nrow(season_data) == 0) {
+    stop("No data found for season: ", season_value)
+  }
+
+  # Output device
+  png(output_file, width = 9, height = 7, units = "in",
+      pointsize = 14, res = 600)
+
+  par(mfrow = c(1, 1), mar = c(4, 4, 4, 1))
+
+  # Empty plot
+  plot(1, type = "n",
+       xlim = c(-0.5, 23.5),
+       ylim = y_limits,
+       xlab = x_label,
+       ylab = y_label,
+       axes = FALSE)
+
+  ## ✅ Correct hour labels (no shift)
+  axis(1, at = 0:23, labels = 0:23, cex.axis = 0.7)
+  axis(2, at = seq(y_limits[1], y_limits[2], by = 1),
+       las = 1, cex.axis = 0.8)
+
+  # Background below zero
+  rect(par("usr")[1], y_limits[1],
+       par("usr")[2], 0,
+       col = background_below_zero, border = NA)
+
+  # Horizontal grid
+  abline(h = seq(y_limits[1], y_limits[2], by = 0.5),
+         col = grid_color, lty = grid_lty, lwd = grid_lwd)
+
+  # Boxplots
+  for (h in hours) {
+
+    hour_data <- season_data[
+      season_data[[group_col]] == h, temp_diff_col
+    ]
+    hour_data <- hour_data[!is.na(hour_data)]
+
+    if (length(hour_data) == 0) next
+
+    boxplot(hour_data, at = h, add = TRUE, axes = FALSE,
+            col = plot_color,
+            border = box_border_color,
+            boxwex = box_width,
+            outline = TRUE,
+            outcex = outlier_size)
+  }
+
+  # Text boxes
+  if (add_text_boxes) {
+
+    label_upper <- bquote(
+      italic(Delta*T) * " > 0: " *
+      .(built_up_name) * " around park " *
+      .(park_name) * " is warmer."
+    )
+
+    twu <- strwidth(label_upper, cex = 0.9) * 1.2
+    thu <- strheight(label_upper, cex = 0.9) * 1.8
+
+    rect(0, y_limits[2] - 0.5 - thu / 2,
+         twu, y_limits[2] - 0.5 + thu / 2,
+         col = "white", border = "black")
+
+    text(twu / 2, y_limits[2] - 0.5,
+         label_upper, cex = 0.9)
+
+    label_lower <- bquote(
+      italic(Delta*T) * " < 0: Park " *
+      .(park_name) * " is warmer."
+    )
+
+    twl <- strwidth(label_lower, cex = 0.9) * 1.2
+    thl <- strheight(label_lower, cex = 0.9) * 1.8
+
+    rect(0, y_limits[1] + 0.5 - thl / 2,
+         twl, y_limits[1] + 0.5 + thl / 2,
+         col = "white", border = "black")
+
+    text(twl / 2, y_limits[1] + 0.5,
+         label_lower, cex = 0.9)
+  }
+
+  # Zero line
+  abline(h = 0, lwd = 1.5,
+         lty = zero_line_lty,
+         col = zero_line_color)
+
+  # Legend
+  legend("topright",
+         legend = temp_diff_label,
+         fill = plot_color,
+         border = box_border_color,
+         bg = "white",
+         cex = 0.9)
+
+  box()
+  dev.off()
+
+  cat("Plot saved to:", output_file, "\n")
+}
+```
+
+FULL CANOPY SEEP
+```{r}
+create_single_temp_diff_plot(
+  data = SEEP,
+  output_file = "SEEP_temp_differences_full_canopy.png",
+  temp_diff_col = "temp_diff",
+  temp_diff_label = "BETZ-SEEP",
+  park_name = "A",
+  built_up_name = "Built-up area",
+  season_value = "full_canopy",
+  plot_color = "cornflowerblue",
+  y_limits = c(-5, 5)
+)
+```
+
+LEAFLESS SEEP
+```{r}
+create_single_temp_diff_plot(
+  data = SEEP,
+  output_file = "SEEP_temp_differences_leafless.png",   
+  temp_diff_col = "temp_diff",
+  temp_diff_label = "BETZ-SEEP",
+  park_name = "A",
+  built_up_name = "Built-up area",
+  season_value = "leafless",
+  plot_color = "cornflowerblue",
+  y_limits = c(-5, 5)
+)
+```
+
+
