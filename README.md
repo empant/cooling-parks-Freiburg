@@ -14,4 +14,4 @@ Temporal analysis of cooling effects rates of three parks in Freiburg, Germany (
 4. [Bootstrapping nighttime cooling rates, park vs. built-up area](R_notebooks/analysis/BS_CR_builtup_areas.Rmd)
 5. [ANOVA on nighttime cooling rates between parks](R_notebooks/analysis/anova_CR.Rmd)
 6. [Impact of weather conditions on cooling rates of parks](R_notebooks/visualisations/violins_weather_conditions)
-7. [Heatwave analysis on nighttime cooling](R_notebooks/visualisations/heatwave_analysis)
+7. [Heatwave analysis on nighttime cooling](R_notebooks/visualisations/heatwave)
